@@ -1,0 +1,25 @@
+[package]
+name = "hexcrypt-core"
+description = "Zero-knowledge secret drop: XChaCha20-Poly1305 envelope encryption shared by the hexcrypt CLI and web client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+wasm = ["wasm-bindgen", "getrandom/wasm_js"]
+
+[dependencies]
+chacha20poly1305 = "0.11"
+getrandom = "0.4"
+base64 = "0.23"
+hex = "0.4"
+wasm-bindgen = { version = "0.2", optional = true }
+
+# wasm-pack's bundled wasm-opt rejects newer wasm features; 42 KB is small enough as-is.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

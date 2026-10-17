@@ -1,0 +1,12 @@
+# Generic self-host: hexcrypt on :8080, put your own TLS proxy in front.
+services:
+  hexcrypt:
+    build: .
+    image: hexcrypt:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - hexcrypt-data:/data
+volumes:
+  hexcrypt-data:

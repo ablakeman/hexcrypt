@@ -1,0 +1,14 @@
+# sneezy.binaryhaze.com: joins the shared bw_proxy network; the
+# celebratingbrentcom-nginx-1 container terminates TLS and proxies to hexcrypt:8080.
+#   docker compose -f compose.yaml -f deploy/compose.sneezy.yaml up -d --build
+services:
+  hexcrypt:
+    ports: !reset []
+    networks:
+      proxy:
+        aliases:
+          - hexcrypt
+networks:
+  proxy:
+    external: true
+    name: bw_proxy

@@ -1,0 +1,13 @@
+/target
+/web/node_modules
+/web/dist
+/web/src/wasm
+/data
+*.db
+*.db-journal
+.env
+.claude/settings.local.json
+
+!/web/dist/.gitkeep
+.gstack/
+/.gstack
