@@ -143,20 +143,26 @@ async function createView() {
       if (!f) { err.textContent = "Choose a file to share first."; return; }
       kind = 1; name = f.name; data = new Uint8Array(await f.arrayBuffer());
     }
-    if (data.length + 64 > maxSize) { err.textContent = `That's ${fmtSize(data.length)}. This server takes up to ${fmtSize(maxSize)}.`; return; }
+    // Blob overhead: version, nonce and tag (41 bytes) plus the envelope header and name.
+    if (data.length + 44 + new TextEncoder().encode(name).length > maxSize) { err.textContent = `That's ${fmtSize(data.length)}. This server takes up to ${fmtSize(maxSize)}.`; return; }
     const life = lifetime();
     if (typeof life === "string") { err.textContent = life; customN.focus(); return; }
     const [ttl, ttlLabel] = life;
     go.disabled = true; go.textContent = "Encrypting…";
     try {
-      const id = hc.new_id();
-      const key = hc.new_key();
-      const blob = hc.encrypt(id, key, kind, name, data);
-      go.textContent = "Uploading…";
-      const res = await fetch(`/api/v1/secrets/${id}`, { method: "PUT", headers: { "x-expires-seconds": String(ttl) }, body: blob as BodyInit });
+      let id: string, key: Uint8Array, blob: Uint8Array, res: Response;
+      // The id is random, so retry once if it is already taken.
+      for (let attempt = 0; ; attempt++) {
+        id = hc.new_id(); key = hc.new_key();
+        blob = hc.encrypt(id, key, kind, name, data);
+        go.textContent = "Uploading…";
+        res = await fetch(`/api/v1/secrets/${id}`, { method: "PUT", headers: { "x-expires-seconds": String(ttl) }, body: blob as BodyInit });
+        if (res.status !== 409 || attempt > 0) break;
+      }
       if (!res.ok) {
         throw new Error(res.status === 413 ? `Too large for this server. The limit is ${fmtSize(maxSize)}.`
           : res.status === 429 ? "You've hit this server's upload limit. Try again later."
+          : res.status === 507 ? "This server is full right now. Try again later."
           : `The server returned an error (${res.status}). Try again.`);
       }
       // The key goes in the fragment; browsers never send it to the server.
@@ -225,7 +231,14 @@ function revealView(id: string) {
       }
       if (!res.ok) throw new Error(`The server returned an error (${res.status}). Try again.`);
       const blob = new Uint8Array(await res.arrayBuffer());
-      const opened = hc.decrypt(id, key, blob);
+      let opened: hc.Opened;
+      try { opened = hc.decrypt(id, key, blob); } catch (e) {
+        // The server copy is already gone, so Reveal can't be retried.
+        state.textContent = "Gone";
+        msg.textContent = `The secret was fetched and deleted from the server, but this link's key can't decrypt it (${(e as Error).message ?? e}). Ask the sender for a new link.`;
+        foot.hidden = true;
+        return;
+      }
       const dump = el("pre", { class: "dump" });
       body.replaceChildren(dump);
       await stream(dump, hexRows(blob));
@@ -246,7 +259,14 @@ function revealView(id: string) {
       } else {
         const name = opened.name || "secret";
         body.replaceChildren(el("div", { class: "file" }, el("code", {}, name), el("span", {}, fmtSize(opened.data.length))));
-        action = el("a", { class: "btn", href: URL.createObjectURL(new Blob([opened.data as BlobPart])), download: name }, "Download");
+        const file = new Blob([opened.data as BlobPart]);
+        action = button("btn", "Download");
+        // A fresh object URL per click, revoked once the download has started.
+        action.onclick = () => {
+          const a = el("a", { href: URL.createObjectURL(file), download: name });
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+        };
       }
       foot.replaceChildren(el("span", { class: "note" }, "This is the only copy now. Save it before you leave."), action);
       action.focus();
