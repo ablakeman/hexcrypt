@@ -27,7 +27,7 @@ The same Rust crate (`hexcrypt-core`) runs natively in the CLI and as WebAssembl
 ## Install the CLI
 
 ```
-cargo install hexcrypt
+cargo install hexcrypt-cli
 ```
 
 `hexcrypt send` defaults to https://hexcrypt.com. Point it elsewhere with `--server` or `HEXCRYPT_SERVER`.

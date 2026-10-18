@@ -15,7 +15,7 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY --from=web /src/crates/hexcrypt/dist ./crates/hexcrypt/dist
-RUN cargo build --release --locked -p hexcrypt && mkdir /data
+RUN cargo build --release --locked -p hexcrypt-cli && mkdir /data
 
 # Stage 3: runtime
 FROM gcr.io/distroless/cc-debian12:nonroot

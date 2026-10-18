@@ -37,7 +37,7 @@ function frame(...content: Node[]) {
     el("footer", {},
       el("span", {}, "Zero-knowledge. Encrypted in your browser; the server only ever sees ciphertext."),
       el("a", { href: "https://github.com/ablakeman/hexcrypt" }, "Source"),
-      el("span", {}, "CLI: ", el("code", {}, "cargo install hexcrypt")),
+      el("span", {}, "CLI: ", el("code", {}, "cargo install hexcrypt-cli")),
     ),
   );
   initTheme(themeBtn);

@@ -1,5 +1,5 @@
 [package]
-name = "hexcrypt"
+name = "hexcrypt-cli"
 description = "Zero-knowledge one-time secret drop: CLI client and self-hostable server in one binary"
 version.workspace = true
 edition.workspace = true
