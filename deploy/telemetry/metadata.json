@@ -1,0 +1,11 @@
+{
+  "title": "hexcrypt telemetry",
+  "description": "One row per request to hexcrypt.com. Client addresses are cut to /24 (IPv4) or /48 (IPv6) and secret ids are replaced with :id. Start with the daily view; filter requests by ts and facet by event or via.",
+  "databases": {
+    "telemetry": {
+      "tables": {
+        "requests": {"sort_desc": "ts", "facets": ["event", "via", "status"]}
+      }
+    }
+  }
+}

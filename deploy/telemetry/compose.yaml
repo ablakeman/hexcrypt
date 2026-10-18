@@ -1,12 +1,17 @@
-# Serves the telemetry report on bw_proxy. The shared nginx does TLS, the IP allowlist and auth.
-#   docker compose -f deploy/telemetry/compose.yaml up -d
+# Datasette over the telemetry DB, on bw_proxy. The shared nginx does TLS, the IP allowlist and auth.
+#   docker compose -f deploy/telemetry/compose.yaml up -d --build
 name: hexcrypt-telemetry
 services:
   telemetry:
-    image: nginx:alpine
+    build: .
+    image: hexcrypt-telemetry:latest
     restart: unless-stopped
+    command: >
+      datasette serve /data/telemetry.db --host 0.0.0.0 --port 8001
+      --metadata /metadata.json --setting sql_time_limit_ms 5000
     volumes:
-      - /srv/www/hexcrypt-telemetry/public:/usr/share/nginx/html:ro
+      - /srv/www/hexcrypt-telemetry/db:/data:ro
+      - ./metadata.json:/metadata.json:ro
     networks:
       proxy:
         aliases:
