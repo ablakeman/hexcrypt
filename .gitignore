@@ -1,6 +1,6 @@
 /target
 /web/node_modules
-/web/dist
+/crates/hexcrypt/dist
 /web/src/wasm
 /data
 *.db
@@ -8,6 +8,5 @@
 .env
 .claude/settings.local.json
 
-!/web/dist/.gitkeep
 .gstack/
 /.gstack

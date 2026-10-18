@@ -204,7 +204,7 @@ async fn fetch(State(app): State<App>, Path(id): Path<String>) -> Response {
 }
 
 #[derive(rust_embed::Embed)]
-#[folder = "$CARGO_MANIFEST_DIR/../../web/dist"]
+#[folder = "$CARGO_MANIFEST_DIR/dist"]
 struct Dist;
 
 async fn static_file(uri: Uri) -> Response {

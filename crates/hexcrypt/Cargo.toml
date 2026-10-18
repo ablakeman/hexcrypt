@@ -5,6 +5,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "../../README.md"
+keywords = ["secrets", "encryption", "zero-knowledge", "one-time", "cli"]
+categories = ["command-line-utilities", "cryptography", "web-programming::http-server"]
+# dist/ is the built web UI (gitignored); it must exist before `cargo publish`.
+include = ["src/**", "build.rs", "dist/**"]
 
 [[bin]]
 name = "hexcrypt"

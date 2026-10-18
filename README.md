@@ -62,7 +62,7 @@ Blob format: `0x01 || nonce[24] || ciphertext+tag`. Plaintext envelope: `kind(1:
 
 ```
 cargo test                         # core + server tests
-cd web && npm install && npm run wasm && npm run build
+cd web && npm install && npm run wasm && npm run build   # outputs to crates/hexcrypt/dist
 cargo run -- serve --bind 127.0.0.1:8080
 cd web && npm run dev               # Vite dev server proxies /api to :8080
 ```

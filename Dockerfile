@@ -14,7 +14,7 @@ FROM rust:1.95-bookworm AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
-COPY --from=web /src/web/dist ./web/dist
+COPY --from=web /src/crates/hexcrypt/dist ./crates/hexcrypt/dist
 RUN cargo build --release --locked -p hexcrypt && mkdir /data
 
 # Stage 3: runtime
