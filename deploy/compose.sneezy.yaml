@@ -4,6 +4,11 @@
 services:
   hexcrypt:
     ports: !reset []
+    # Secrets live in process memory. Cap resident RAM low and allow lots of swap, so the
+    # kernel pushes stored (cold) ciphertext out to sneezy's 20G /swapfile instead of
+    # holding it in RAM. cgroup v2 has no per-container swappiness; this limit is the lever.
+    mem_limit: 64m
+    memswap_limit: 20g
     networks:
       proxy:
         aliases:
