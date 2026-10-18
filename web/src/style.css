@@ -1,29 +1,32 @@
 :root {
+  /* Abernathy terminal theme: https://getmoshi.app/themes/abernathy */
   color-scheme: dark;
-  --bg: #0b0f14;
-  --bg-2: #111822;
-  --bg-3: #18222e;
-  --line: #243041;
-  --text: #e6edf3;
-  --muted: #8b98a8;
-  --accent: #7cf5c3;
-  --accent-ink: #052016;
-  --danger: #ff7b7b;
+  --bg: #111416;
+  --bg-2: #181c1f;
+  --bg-3: #1f2428;
+  --line: #404040;
+  --text: #eeeeec;
+  --muted: #bbbbbb;
+  --accent: #1093f5;
+  --accent-hover: #11b5f6;
+  --accent-ink: #111416;
+  --danger: #ff0000;
   --radius: 14px;
   --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f6f8fa;
+  --bg: #f4f4f2;
   --bg-2: #ffffff;
-  --bg-3: #eef2f6;
-  --line: #d5dde7;
-  --text: #121a24;
-  --muted: #5b6878;
-  --accent: #0e8f66;
+  --bg-3: #eaeae7;
+  --line: #cfcfcb;
+  --text: #111416;
+  --muted: #5c6166;
+  --accent: #0b6fc0;
+  --accent-hover: #1093f5;
   --accent-ink: #ffffff;
-  --danger: #c62828;
+  --danger: #cd0000;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
@@ -33,7 +36,7 @@ body {
   font: 16px/1.55 var(--font);
   -webkit-font-smoothing: antialiased;
   background-image:
-    radial-gradient(60rem 30rem at 50% -10rem, rgba(124, 245, 195, 0.08), transparent 60%);
+    radial-gradient(60rem 30rem at 50% -10rem, rgba(16, 147, 245, 0.10), transparent 60%);
 }
 .shell { max-width: 680px; margin: 0 auto; padding: 48px 16px 64px; }
 
@@ -70,7 +73,7 @@ label.inline { display: flex; align-items: center; gap: 8px; color: var(--muted)
 select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; }
 
 .btn { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 11px 18px; font: inherit; font-weight: 600; cursor: pointer; }
-.btn:hover { filter: brightness(1.08); }
+.btn:hover { background: var(--accent-hover); }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.ghost { background: var(--bg-3); color: var(--text); }
 .btn.big { width: 100%; padding: 14px; font-size: 17px; }
