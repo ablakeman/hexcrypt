@@ -103,7 +103,7 @@ async function createView() {
   };
 
   const h1 = el("h1", {}, "Share a secret once.");
-  const lede = el("p", { class: "lede" }, "Encrypted on your device. You hold the key, not us.");
+  const lede = el("p", { class: "lede" }, "Encrypted on your device.", el("br"), "You hold the key, not us.");
   const cli = el("div", { class: "cli" }, el("p", {}, "Or from a terminal:"), el("pre", {}, "$ cargo install hexcrypt-cli\n$ hexcrypt send .env"));
   const sample = `${location.origin}/${hc.new_id()}#${hc.encode_key(hc.new_key())}`;
   const explain = el("section", { class: "explain" },
