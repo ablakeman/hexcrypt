@@ -1,0 +1,17 @@
+# Serves the telemetry report on bw_proxy. The shared nginx does TLS, the IP allowlist and auth.
+#   docker compose -f deploy/telemetry/compose.yaml up -d
+name: hexcrypt-telemetry
+services:
+  telemetry:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - /srv/www/hexcrypt-telemetry/public:/usr/share/nginx/html:ro
+    networks:
+      proxy:
+        aliases:
+          - hexcrypt-telemetry
+networks:
+  proxy:
+    external: true
+    name: bw_proxy
