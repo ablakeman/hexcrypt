@@ -6,3 +6,6 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
+    environment:
+      # Only the local proxy can reach the port above, so its X-Real-IP is trustworthy.
+      HEXCRYPT_TRUST_PROXY: "1"
