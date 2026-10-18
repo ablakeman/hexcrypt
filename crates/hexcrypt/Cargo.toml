@@ -16,7 +16,7 @@ name = "hexcrypt"
 path = "src/main.rs"
 
 [dependencies]
-hexcrypt-core = { path = "../hexcrypt-core", version = "0.1.0" }
+hexcrypt-core = { path = "../hexcrypt-core", version = "0.1.1" }
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
