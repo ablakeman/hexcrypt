@@ -17,8 +17,9 @@ $ hexcrypt get https://hexcrypt.com/3fa9c2e17b04#Xq9k…
 1. The client makes a random 256-bit key and a random id of 12 hex characters.
 2. The client encrypts the payload with XChaCha20-Poly1305. The payload is the text or the file, with its name. The id is the associated data, so no one can store the blob under a different id.
 3. The client uploads only the ciphertext. The key goes after the `#` in the URL. Browsers do not send the fragment to a server. The command-line interface (CLI) does not send the fragment either.
-4. The first `GET` deletes the row with the same SQL statement that returns it, `DELETE … RETURNING`. If two readers race, only one gets the secret. The server deletes unread secrets when they expire, after 1 hour or 1 day.
-5. The web page does not fetch the secret when it loads. A person must click **Reveal**. Link previews in chat tools do not delete the secret.
+4. The first `GET` deletes the row with the same SQL statement that returns it, `DELETE … RETURNING`. If two readers race, only one gets the secret. The server deletes unread secrets when they expire, after 1 day at most.
+5. The server keeps secrets in memory only. The ciphertext does not go to disk. When the server restarts, it loses all secrets that are not read.
+6. The web page does not fetch the secret when it loads. A person must click **Reveal**. Link previews in chat tools do not delete the secret.
 
 The server can see:
 
@@ -48,8 +49,10 @@ cargo install hexcrypt-cli
 The same binary is the server:
 
 ```
-hexcrypt serve --bind 0.0.0.0:8080 --db /data/hexcrypt.db --max-size 1048576 --max-expiry 86400 --daily-quota 20971520
+hexcrypt serve --bind 0.0.0.0:8080 --max-size 1048576 --max-expiry 86400 --daily-quota 20971520
 ```
+
+By default, the server keeps secrets in memory, and a restart deletes them. To keep secrets on disk across restarts, set `--db /path/to/hexcrypt.db`. Burned secrets are then overwritten with zeros (SQLite `secure_delete`).
 
 Or use Docker:
 

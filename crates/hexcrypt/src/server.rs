@@ -19,7 +19,9 @@ use tower_http::set_header::SetResponseHeaderLayer;
 pub struct Opts {
     #[arg(long, env = "HEXCRYPT_BIND", default_value = "127.0.0.1:8080")]
     pub bind: SocketAddr,
-    #[arg(long, env = "HEXCRYPT_DB", default_value = "data/hexcrypt.db")]
+    /// SQLite path. The default keeps secrets in memory only, so a restart purges them
+    /// and ciphertext never reaches disk. Give a file path to keep secrets across restarts.
+    #[arg(long, env = "HEXCRYPT_DB", default_value = ":memory:")]
     pub db: String,
     /// Maximum ciphertext size in bytes.
     #[arg(long, env = "HEXCRYPT_MAX_SIZE", default_value_t = 1024 * 1024)]
@@ -91,7 +93,9 @@ pub fn open_db(path: &str) -> anyhow::Result<Connection> {
     }
     let db = Connection::open(path)?;
     db.execute_batch(
+        // secure_delete zeroes burned blobs instead of leaving them in free pages.
         "PRAGMA journal_mode=WAL;
+         PRAGMA secure_delete=ON;
          CREATE TABLE IF NOT EXISTS secrets (
            id TEXT PRIMARY KEY,
            blob BLOB NOT NULL,
