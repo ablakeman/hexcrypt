@@ -1,6 +1,6 @@
 # hexcrypt
 
-Share a secret once. Encrypted in your browser or terminal, the key never leaves the link, and the first read burns it.
+Share a secret once. Your browser or your terminal encrypts the secret. The key stays in the link. The first read deletes the secret.
 
 **https://hexcrypt.com**
 
@@ -14,15 +14,26 @@ $ hexcrypt get https://hexcrypt.com/3fa9c2e17b04#Xq9k…
 
 ## How it works
 
-1. The client generates a random 256-bit key and a random 12-hex-character id.
-2. The payload (text or file, with its name) is encrypted with XChaCha20-Poly1305. The id is bound in as associated data, so a blob cannot be re-homed under another id.
-3. Only the ciphertext is uploaded. The key goes after the `#` in the URL. Browsers never send the fragment to any server, and the CLI never sends it either.
-4. The first `GET` deletes the row in the same SQL statement that returns it (`DELETE … RETURNING`), so two racing readers cannot both succeed. Unread secrets are purged when they expire (1 hour or 1 day).
-5. The web page does not fetch on load. A human has to click **Reveal**, so chat link previews do not burn the secret.
+1. The client makes a random 256-bit key and a random id of 12 hex characters.
+2. The client encrypts the payload with XChaCha20-Poly1305. The payload is the text or the file, with its name. The id is the associated data, so no one can store the blob under a different id.
+3. The client uploads only the ciphertext. The key goes after the `#` in the URL. Browsers do not send the fragment to a server. The command-line interface (CLI) does not send the fragment either.
+4. The first `GET` deletes the row with the same SQL statement that returns it, `DELETE … RETURNING`. If two readers race, only one gets the secret. The server deletes unread secrets when they expire, after 1 hour or 1 day.
+5. The web page does not fetch the secret when it loads. A person must click **Reveal**. Link previews in chat tools do not delete the secret.
 
-What the server can see: ciphertext, its size, the id, timing, and the client's IP. What it cannot see: the key, the plaintext, the filename.
+The server can see:
 
-The same Rust crate (`hexcrypt-core`) runs natively in the CLI and as WebAssembly in the browser, so both clients share one wire format.
+- the ciphertext and its size
+- the id
+- the time of each request
+- the IP address of the client
+
+The server cannot see:
+
+- the key
+- the plaintext
+- the file name
+
+The CLI and the browser use the same Rust crate, `hexcrypt-core`. The CLI runs it natively. The browser runs it as WebAssembly. Both clients use one wire format.
 
 ## Install the CLI
 
@@ -30,7 +41,7 @@ The same Rust crate (`hexcrypt-core`) runs natively in the CLI and as WebAssembl
 cargo install hexcrypt-cli
 ```
 
-`hexcrypt send` defaults to https://hexcrypt.com. Point it elsewhere with `--server` or `HEXCRYPT_SERVER`.
+`hexcrypt send` uses https://hexcrypt.com by default. To use a different server, set `--server` or `HEXCRYPT_SERVER`.
 
 ## Self-host
 
@@ -40,23 +51,31 @@ The same binary is the server:
 hexcrypt serve --bind 0.0.0.0:8080 --db /data/hexcrypt.db --max-size 1048576 --max-expiry 86400 --daily-quota 20971520
 ```
 
-or with Docker:
+Or use Docker:
 
 ```
 docker compose up -d --build
 ```
 
-Put a TLS-terminating proxy in front and forward `X-Forwarded-For` (rate limiting keys on it). Limits are per IPv4 address or IPv6 /64: 1 request per 2 s (burst 30), uploads 1 per 10 s (burst 10) and `--daily-quota` bytes per UTC day. Every flag has an env var equivalent: `HEXCRYPT_BIND`, `HEXCRYPT_DB`, `HEXCRYPT_MAX_SIZE`, `HEXCRYPT_MAX_EXPIRY`, `HEXCRYPT_DAILY_QUOTA`.
+Put a proxy that terminates TLS in front of the server. Make the proxy forward `X-Forwarded-For`. The rate limits use this header to find the client address.
+
+The limits apply to each IPv4 address or to each IPv6 /64 prefix:
+
+- 1 request per 2 s, with a burst of 30.
+- 1 upload per 10 s, with a burst of 10.
+- `--daily-quota` bytes per UTC day.
+
+Each flag has an environment variable: `HEXCRYPT_BIND`, `HEXCRYPT_DB`, `HEXCRYPT_MAX_SIZE`, `HEXCRYPT_MAX_EXPIRY`, and `HEXCRYPT_DAILY_QUOTA`.
 
 ## API
 
 | Method | Path | Notes |
 |---|---|---|
-| `PUT` | `/api/v1/secrets/{id}` | body: raw ciphertext; header `X-Expires-Seconds: 60…max_expiry`. `201` with `{"id","expires_at"}`, `409` if the id exists, `429` if rate-limited or over the daily quota. |
-| `GET` | `/api/v1/secrets/{id}` | returns the ciphertext once, then `404`. |
-| `GET` | `/api/v1/config` | `{"max_size","max_expiry"}` |
+| `PUT` | `/api/v1/secrets/{id}` | The body is the raw ciphertext. Set the header `X-Expires-Seconds` to a value from 60 to `max_expiry`. The server returns `201` with `{"id","expires_at"}`. It returns `409` if the id exists. It returns `429` if the client is over the rate limit or over the daily quota. |
+| `GET` | `/api/v1/secrets/{id}` | Returns the ciphertext once. After that, it returns `404`. |
+| `GET` | `/api/v1/config` | Returns `{"max_size","max_expiry"}`. |
 
-Blob format: `0x01 || nonce[24] || ciphertext+tag`. Plaintext envelope: `kind(1: 0=text,1=file) || name_len(u16 LE) || name || data`.
+The blob format is `0x01 || nonce[24] || ciphertext+tag`. The plaintext envelope is `kind(1: 0=text,1=file) || name_len(u16 LE) || name || data`.
 
 ## Develop
 
