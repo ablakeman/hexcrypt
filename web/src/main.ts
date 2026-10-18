@@ -3,7 +3,10 @@ import init, * as hc from "./wasm/hexcrypt_core.js";
 
 const app = document.getElementById("app")!;
 const ID_RE = /^\/([0-9a-f]{12})\/?$/;
-const EXPIRIES: [string, number][] = [["1 hour", 3600], ["1 day", 86400], ["7 days", 604800]];
+const EXPIRIES: [string, number][] = [
+  ["30 minutes", 1800], ["1 hour", 3600], ["6 hours", 21600], ["12 hours", 43200], ["1 day", 86400], ["7 days", 604800],
+];
+const UNITS: [string, number][] = [["minutes", 60], ["hours", 3600]];
 const calm = matchMedia("(prefers-reduced-motion: reduce)");
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...kids: (Node | string)[]) => {
@@ -71,13 +74,30 @@ async function createView() {
   const tabFile = el("button", { type: "button", role: "tab", "aria-selected": "false" }, "File");
   const select = el("select", {}) as HTMLSelectElement;
   for (const [label, secs] of EXPIRIES) if (secs <= maxExpiry) select.append(el("option", { value: String(secs) }, label));
+  select.append(el("option", { value: "custom" }, "Custom…"));
   select.value = String(Math.min(86400, maxExpiry));
+  const customN = el("input", { type: "number", min: "1", step: "1", value: "2", inputmode: "numeric", "aria-label": "Custom lifetime" }) as HTMLInputElement;
+  const customUnit = el("select", { "aria-label": "Unit" }) as HTMLSelectElement;
+  for (const [label, secs] of UNITS) customUnit.append(el("option", { value: String(secs) }, label));
+  customUnit.value = "3600";
+  const custom = el("span", { class: "custom", hidden: "" }, customN, customUnit);
+  select.onchange = () => { custom.hidden = select.value !== "custom"; if (!custom.hidden) customN.focus(); };
+  // Seconds and a human label for the chosen lifetime, or an error message.
+  const lifetime = (): [number, string] | string => {
+    if (select.value !== "custom") return [Number(select.value), select.selectedOptions[0].text];
+    const n = Number(customN.value), secs = n * Number(customUnit.value);
+    const max = EXPIRIES.filter(([, s]) => s <= maxExpiry).at(-1)![0];
+    if (!Number.isInteger(n) || n < 1 || secs < 60) return "Enter a whole number of minutes or hours.";
+    if (secs > maxExpiry) return `That's longer than this server allows. Pick ${max} or less.`;
+    const unit = customUnit.selectedOptions[0].text;
+    return [secs, `${n} ${n === 1 ? unit.slice(0, -1) : unit}`];
+  };
   const go = button("btn", "Create link");
   const err = el("p", { class: "err", role: "alert" });
   const panel = el("section", { class: "panel", "aria-label": "New secret" },
     el("div", { class: "panel-bar" }, el("div", { class: "tabs", role: "tablist" }, tabText, tabFile), el("span", {}, `Up to ${fmtSize(maxSize)}`)),
     el("div", { class: "panel-body" }, ta, drop),
-    el("div", { class: "panel-foot" }, el("label", { class: "inline" }, "Expires after", select), go),
+    el("div", { class: "panel-foot" }, el("div", { class: "expiry" }, el("label", { class: "inline" }, "Expires after", select), custom), go),
     err,
   );
 
@@ -124,13 +144,16 @@ async function createView() {
       kind = 1; name = f.name; data = new Uint8Array(await f.arrayBuffer());
     }
     if (data.length + 64 > maxSize) { err.textContent = `That's ${fmtSize(data.length)}. This server takes up to ${fmtSize(maxSize)}.`; return; }
+    const life = lifetime();
+    if (typeof life === "string") { err.textContent = life; customN.focus(); return; }
+    const [ttl, ttlLabel] = life;
     go.disabled = true; go.textContent = "Encrypting…";
     try {
       const id = hc.new_id();
       const key = hc.new_key();
       const blob = hc.encrypt(id, key, kind, name, data);
       go.textContent = "Uploading…";
-      const res = await fetch(`/api/v1/secrets/${id}`, { method: "PUT", headers: { "x-expires-seconds": select.value }, body: blob as BodyInit });
+      const res = await fetch(`/api/v1/secrets/${id}`, { method: "PUT", headers: { "x-expires-seconds": String(ttl) }, body: blob as BodyInit });
       if (!res.ok) {
         throw new Error(res.status === 413 ? `Too large for this server. The limit is ${fmtSize(maxSize)}.`
           : res.status === 429 ? "You've hit this server's upload limit. Try again later."
@@ -141,7 +164,7 @@ async function createView() {
       h1.textContent = "Your link is ready.";
       lede.textContent = "Send it over a channel you trust. Whoever opens it first gets the secret. Chat apps that preview links don't open it; only pressing Reveal does.";
       cli.remove(); explain.remove();
-      showLink(panel, blob, url, select.selectedOptions[0].text);
+      showLink(panel, blob, url, ttlLabel);
     } catch (e) {
       err.textContent = String((e as Error).message ?? e);
       go.disabled = false; go.textContent = "Create link";
