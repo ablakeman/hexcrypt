@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
-# Stage 1: web UI (wasm-pack + vite)
+# Stage 1: web UI (wasm-pack + vite). Vite 7 needs Node 20.19+; bookworm ships 18.
+FROM node:22-bookworm AS node
 FROM rust:1.95-bookworm AS web
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm && rm -rf /var/lib/apt/lists/*
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 RUN rustup target add wasm32-unknown-unknown && cargo install wasm-pack --locked
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
