@@ -16,8 +16,9 @@ since=$(cat last-run 2>/dev/null || echo 1970-01-01T00:00:00Z)
 docker logs --since "$since" --until "$now" "$NGINX" 2>/dev/null | sed -n 's/^hexcrypt //p' >> access.log
 echo "$now" > last-run
 
-goaccess access.log --log-format=COMBINED --html-report-title="hexcrypt" --no-global-config \
-    -o public/index.html.tmp >/dev/null 2>&1 && mv public/index.html.tmp public/index.html
+# GoAccess needs a .html output name, and </dev/null stops it waiting on cron's stdin.
+goaccess access.log --log-format=COMBINED --html-report-title="hexcrypt" --no-global-config --no-progress \
+    -o public/.next.html </dev/null && mv public/.next.html public/index.html
 
 # One row per day. The CLI sends no User-Agent, so nginx logs "-".
 awk -F'"' '
