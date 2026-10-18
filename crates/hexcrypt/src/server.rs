@@ -1,18 +1,18 @@
 //! `hexcrypt serve`: stores ciphertext blobs, burns them on first read, serves the web UI.
-use std::net::SocketAddr;
+use std::collections::HashMap;
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit, Path, State};
-use axum::http::{header, HeaderMap, HeaderValue, StatusCode, Uri};
+use axum::extract::{Path, Request, State};
+use axum::http::{header, HeaderValue, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, put};
 use axum::Router;
 use rusqlite::{params, Connection, OptionalExtension};
 use tower_governor::governor::GovernorConfigBuilder;
-use tower_governor::key_extractor::SmartIpKeyExtractor;
-use tower_governor::GovernorLayer;
+use tower_governor::key_extractor::{KeyExtractor, SmartIpKeyExtractor};
+use tower_governor::{GovernorError, GovernorLayer};
 use tower_http::set_header::SetResponseHeaderLayer;
 
 #[derive(clap::Args, Clone)]
@@ -22,18 +22,61 @@ pub struct Opts {
     #[arg(long, env = "HEXCRYPT_DB", default_value = "data/hexcrypt.db")]
     pub db: String,
     /// Maximum ciphertext size in bytes.
-    #[arg(long, env = "HEXCRYPT_MAX_SIZE", default_value_t = 10 * 1024 * 1024)]
+    #[arg(long, env = "HEXCRYPT_MAX_SIZE", default_value_t = 1024 * 1024)]
     pub max_size: usize,
     /// Maximum lifetime in seconds.
-    #[arg(long, env = "HEXCRYPT_MAX_EXPIRY", default_value_t = 7 * 86400)]
+    #[arg(long, env = "HEXCRYPT_MAX_EXPIRY", default_value_t = 86400)]
     pub max_expiry: u64,
+    /// Bytes one client (IPv4 address or IPv6 /64) may upload per UTC day.
+    #[arg(long, env = "HEXCRYPT_DAILY_QUOTA", default_value_t = 20 * 1024 * 1024)]
+    pub daily_quota: u64,
 }
 
 #[derive(Clone)]
 struct App {
     // ponytail: one connection behind a mutex; move to a pool if writes contend.
     db: Arc<Mutex<Connection>>,
+    quota: Arc<Mutex<Quota>>,
     opts: Opts,
+}
+
+/// Rate-limit key: the client IP, with IPv6 collapsed to its /64 so one host
+/// cannot rotate through its own subnet to dodge the limits.
+#[derive(Clone)]
+struct ClientIp;
+
+impl KeyExtractor for ClientIp {
+    type Key = IpAddr;
+    fn extract<T>(&self, req: &axum::http::Request<T>) -> Result<IpAddr, GovernorError> {
+        SmartIpKeyExtractor.extract(req).map(|ip| match ip {
+            IpAddr::V6(v6) => IpAddr::V6(Ipv6Addr::from(u128::from(v6) & (!0u128 << 64))),
+            v4 => v4,
+        })
+    }
+}
+
+/// Upload bytes per client for the current UTC day.
+// ponytail: fixed daily window, so a client can spend 2x the quota across midnight; use a token bucket if that matters.
+#[derive(Default)]
+struct Quota {
+    day: i64,
+    used: HashMap<IpAddr, u64>,
+}
+
+impl Quota {
+    fn charge(&mut self, ip: IpAddr, n: u64, limit: u64) -> bool {
+        let day = now() / 86400;
+        if day != self.day {
+            self.day = day;
+            self.used.clear();
+        }
+        let used = self.used.entry(ip).or_default();
+        if *used + n > limit {
+            return false;
+        }
+        *used += n;
+        true
+    }
 }
 
 fn now() -> i64 {
@@ -60,29 +103,35 @@ pub fn open_db(path: &str) -> anyhow::Result<Connection> {
 }
 
 pub fn router(db: Arc<Mutex<Connection>>, opts: Opts) -> Router {
-    let state = App { db, opts: opts.clone() };
+    let state = App { db, quota: Default::default(), opts };
 
-    let governor = Arc::new(
-        GovernorConfigBuilder::default()
-            .key_extractor(SmartIpKeyExtractor)
-            .per_second(2)
-            .burst_size(30)
-            .finish()
-            .unwrap(),
-    );
-    let limiter = governor.limiter().clone();
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(Duration::from_secs(60)).await;
-            limiter.retain_recent();
-        }
-    });
+    // One token back per `period`, up to `burst` saved.
+    let limit = |period: Duration, burst: u32| {
+        let cfg = Arc::new(
+            GovernorConfigBuilder::default()
+                .key_extractor(ClientIp)
+                .period(period)
+                .burst_size(burst)
+                .finish()
+                .unwrap(),
+        );
+        let limiter = cfg.limiter().clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                limiter.retain_recent();
+            }
+        });
+        GovernorLayer::new(cfg)
+    };
 
     let api = Router::new()
         .route("/config", get(config))
-        .route("/secrets/{id}", get(fetch).put(store))
-        .layer(DefaultBodyLimit::max(opts.max_size + 1024))
-        .layer(GovernorLayer::new(governor))
+        .route(
+            "/secrets/{id}",
+            get(fetch).merge(put(store).layer(limit(Duration::from_secs(10), 10))),
+        )
+        .layer(limit(Duration::from_secs(2), 30))
         .with_state(state);
 
     let hdr = |k: header::HeaderName, v: &'static str| {
@@ -130,31 +179,40 @@ fn json(status: StatusCode, body: String) -> Response {
 }
 
 async fn config(State(app): State<App>) -> Response {
-    json(StatusCode::OK, format!(r#"{{"max_size":{}}}"#, app.opts.max_size))
+    json(
+        StatusCode::OK,
+        format!(r#"{{"max_size":{},"max_expiry":{}}}"#, app.opts.max_size, app.opts.max_expiry),
+    )
 }
 
-async fn store(
-    State(app): State<App>,
-    Path(id): Path<String>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Response {
+async fn store(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
     if !hexcrypt_core::is_valid_id(&id) {
         return (StatusCode::BAD_REQUEST, "bad id").into_response();
     }
-    let ttl: u64 = match headers
+    let ttl: u64 = match req
+        .headers()
         .get("x-expires-seconds")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse().ok())
     {
         Some(t) if t >= 60 && t <= app.opts.max_expiry => t,
-        _ => return (StatusCode::BAD_REQUEST, "x-expires-seconds out of range").into_response(),
+        _ => {
+            let msg = format!("x-expires-seconds must be 60..={}", app.opts.max_expiry);
+            return (StatusCode::BAD_REQUEST, msg).into_response();
+        }
     };
-    if body.len() > app.opts.max_size {
+    // The governor layer in front already rejected requests without a key.
+    let Ok(ip) = ClientIp.extract(&req) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let Ok(body) = axum::body::to_bytes(req.into_body(), app.opts.max_size).await else {
         return (StatusCode::PAYLOAD_TOO_LARGE, "too large").into_response();
-    }
+    };
     if body.len() < 1 + hexcrypt_core::NONCE_LEN + 16 {
         return (StatusCode::BAD_REQUEST, "blob too short").into_response();
+    }
+    if !app.quota.lock().unwrap().charge(ip, body.len() as u64, app.opts.daily_quota) {
+        return (StatusCode::TOO_MANY_REQUESTS, "daily upload quota exceeded").into_response();
     }
     let expires_at = now() + ttl as i64;
     let r = app.db.lock().unwrap().execute(
@@ -233,15 +291,25 @@ mod tests {
     use tower::ServiceExt;
 
     fn app() -> Router {
-        let opts = Opts { bind: "127.0.0.1:0".parse().unwrap(), db: ":memory:".into(), max_size: 1024, max_expiry: 86400 };
+        let opts = Opts {
+            bind: "127.0.0.1:0".parse().unwrap(),
+            db: ":memory:".into(),
+            max_size: 1024,
+            max_expiry: 86400,
+            daily_quota: 2500,
+        };
         router(Arc::new(Mutex::new(open_db(":memory:").unwrap())), opts)
     }
 
     async fn put(app: &Router, id: &str, ttl: &str, body: Vec<u8>) -> StatusCode {
+        put_from(app, "10.0.0.1", id, ttl, body).await
+    }
+
+    async fn put_from(app: &Router, ip: &str, id: &str, ttl: &str, body: Vec<u8>) -> StatusCode {
         app.clone()
             .oneshot(
                 Request::put(format!("/api/v1/secrets/{id}"))
-                    .header("x-forwarded-for", "10.0.0.1")
+                    .header("x-forwarded-for", ip)
                     .header("x-expires-seconds", ttl)
                     .body(Body::from(body))
                     .unwrap(),
@@ -280,5 +348,25 @@ mod tests {
         assert_eq!(put(&app, "3fa9c2e17b04", "3600", vec![1; 5]).await, StatusCode::BAD_REQUEST);
         assert_eq!(put(&app, "3fa9c2e17b04", "3600", vec![1; 2000]).await, StatusCode::PAYLOAD_TOO_LARGE);
         assert_eq!(get_status(&app, "000000000000").await.0, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn daily_quota_per_v6_subnet() {
+        let app = app();
+        // Same /64, different hosts: they share one 2500-byte quota.
+        assert_eq!(put_from(&app, "2001:db8::1", "000000000001", "3600", vec![1; 1000]).await, StatusCode::CREATED);
+        assert_eq!(put_from(&app, "2001:db8::2", "000000000002", "3600", vec![1; 1000]).await, StatusCode::CREATED);
+        assert_eq!(put_from(&app, "2001:db8::3", "000000000003", "3600", vec![1; 1000]).await, StatusCode::TOO_MANY_REQUESTS);
+        // Another /64 has its own.
+        assert_eq!(put_from(&app, "2001:db8:0:1::1", "000000000003", "3600", vec![1; 1000]).await, StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn put_rate_limit() {
+        let app = app();
+        for i in 0..10 {
+            assert_eq!(put(&app, &format!("{i:012x}"), "3600", vec![1; 64]).await, StatusCode::CREATED);
+        }
+        assert_eq!(put(&app, "00000000000a", "3600", vec![1; 64]).await, StatusCode::TOO_MANY_REQUESTS);
     }
 }

@@ -14,7 +14,7 @@ pub fn parse_expires(s: &str) -> anyhow::Result<u64> {
         "d" => (num, 86400),
         _ => (s, 1),
     };
-    let n: u64 = num.parse().with_context(|| format!("bad --expires {s:?}; use e.g. 1h, 1d, 7d"))?;
+    let n: u64 = num.parse().with_context(|| format!("bad --expires {s:?}; use e.g. 1h, 1d"))?;
     Ok(n * mult)
 }
 

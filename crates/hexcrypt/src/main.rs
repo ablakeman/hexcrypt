@@ -16,7 +16,7 @@ enum Cmd {
     Send {
         /// File to send. Omit or "-" to read stdin.
         file: Option<String>,
-        /// Lifetime: 1h, 1d or 7d.
+        /// Lifetime, e.g. 1h or 1d (the server sets the maximum).
         #[arg(short, long, default_value = "1d")]
         expires: String,
         /// Server base URL.
