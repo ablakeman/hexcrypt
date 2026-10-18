@@ -37,7 +37,7 @@ pub struct Opts {
     pub max_total_bytes: u64,
     /// Take the client address from `X-Real-IP` instead of the TCP peer. Set this only
     /// behind a proxy that overwrites that header and is the only way in.
-    #[arg(long, env = "HEXCRYPT_TRUST_PROXY")]
+    #[arg(long, env = "HEXCRYPT_TRUST_PROXY", value_parser = clap::builder::BoolishValueParser::new())]
     pub trust_proxy: bool,
 }
 
