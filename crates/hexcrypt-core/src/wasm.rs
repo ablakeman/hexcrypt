@@ -41,27 +41,11 @@ pub fn encrypt(id: &str, k: &[u8], kind: u8, name: &str, data: &[u8]) -> Result<
     js(crate::encrypt(id, &key(k)?, &env.to_bytes()))
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(getter_with_clone)]
 pub struct Opened {
-    kind: u8,
-    name: String,
-    data: Vec<u8>,
-}
-
-#[wasm_bindgen]
-impl Opened {
-    #[wasm_bindgen(getter)]
-    pub fn kind(&self) -> u8 {
-        self.kind
-    }
-    #[wasm_bindgen(getter)]
-    pub fn name(&self) -> String {
-        self.name.clone()
-    }
-    #[wasm_bindgen(getter)]
-    pub fn data(&self) -> Vec<u8> {
-        self.data.clone()
-    }
+    pub kind: u8,
+    pub name: String,
+    pub data: Vec<u8>,
 }
 
 #[wasm_bindgen]
