@@ -1,8 +1,10 @@
+import "@fontsource-variable/recursive/mono.css";
 import init, * as hc from "./wasm/hexcrypt_core.js";
 
 const app = document.getElementById("app")!;
 const ID_RE = /^\/([0-9a-f]{12})\/?$/;
 const EXPIRIES: [string, number][] = [["1 hour", 3600], ["1 day", 86400], ["7 days", 604800]];
+const calm = matchMedia("(prefers-reduced-motion: reduce)");
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...kids: (Node | string)[]) => {
   const e = document.createElement(tag);
@@ -10,43 +12,73 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
   e.append(...kids);
   return e;
 };
-const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+const button = (cls: string, label: string) => el("button", { class: cls, type: "button" }, label) as HTMLButtonElement;
+const fmtSize = (n: number) => (n < 1024 ? `${n} bytes` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function frame(...content: Node[]) {
+function frame(intro: Node[], panel: Node, after: Node[] = []) {
   app.replaceChildren(
-    el("header", { class: "top" }, el("a", { href: "/" }, "hexcrypt"), el("span", {}, "zero-knowledge secret drop")),
-    ...content,
-    el("footer", {},
-      el("span", {}, "server sees ciphertext only"),
-      el("a", { href: "https://github.com/ablakeman/hexcrypt" }, "source"),
-      el("span", {}, "cli: ", el("code", {}, "cargo install hexcrypt-cli")),
+    el("header", { class: "top" },
+      el("a", { class: "brand", href: "/" }, el("img", { src: "/favicon.svg", alt: "", width: "24", height: "24" }), "hexcrypt"),
+      el("a", { href: "https://github.com/ablakeman/hexcrypt" }, "Source"),
     ),
+    el("main", { class: "stage" }, el("div", { class: "intro" }, ...intro), panel),
+    ...after,
+    el("footer", {}, "Open source, MIT licensed. Run your own with ", el("code", {}, "hexcrypt serve"), "."),
   );
 }
-const prompt = (cmd: string) => el("p", { class: "prompt cursor" }, "$ ", el("b", {}, cmd));
+
+/** xxd-style rows: what the server actually stores. */
+function hexRows(bytes: Uint8Array, maxRows = 8): string[] {
+  const per = matchMedia("(max-width: 560px)").matches ? 8 : 16;
+  const rows: string[] = [];
+  for (let off = 0; off < bytes.length && rows.length < maxRows; off += per) {
+    const hex = Array.from(bytes.subarray(off, off + per), (b) => b.toString(16).padStart(2, "0")).join("");
+    rows.push(`${off.toString(16).padStart(8, "0")}  ${hex.match(/.{1,4}/g)!.join(" ")}`);
+  }
+  const rest = bytes.length - Math.min(bytes.length, per * maxRows);
+  if (rest > 0) rows.push(`… ${rest.toLocaleString()} more bytes`);
+  return rows;
+}
+
+/** Print rows one at a time, like a terminal. The page's one piece of motion. */
+async function stream(pre: HTMLElement, rows: string[]) {
+  if (calm.matches) { pre.textContent = rows.join("\n"); return; }
+  pre.textContent = "";
+  for (const r of rows) { pre.textContent += (pre.textContent ? "\n" : "") + r; await sleep(45); }
+}
+
+/** A link split at the #: the part the server sees and the part it never does. */
+function anatomy(url: string) {
+  const i = url.indexOf("#");
+  const seg = (cls: string, text: string, cap: string) =>
+    el("span", { class: `seg ${cls}` }, el("code", {}, text), el("span", { class: "cap" }, cap));
+  return el("div", { class: "anatomy" },
+    seg("where", url.slice(0, i), "Sent to the server, to say which secret to fetch."),
+    seg("key", url.slice(i), "Never sent. Browsers keep the part after # to themselves, and it decrypts the secret."),
+  );
+}
 
 async function createView() {
-  let maxSize = 10 * 1024 * 1024;
-  try { maxSize = (await (await fetch("/api/v1/config")).json()).max_size ?? maxSize; } catch {}
+  let maxSize = 1024 * 1024, maxExpiry = 86400;
+  try { ({ max_size: maxSize = maxSize, max_expiry: maxExpiry = maxExpiry } = await (await fetch("/api/v1/config")).json()); } catch {}
 
-  const ta = el("textarea", { placeholder: "paste a password, token, .env, private note", spellcheck: "false", autofocus: "" }) as HTMLTextAreaElement;
-  const fileInput = el("input", { type: "file" }) as HTMLInputElement;
-  const dropText = el("div", {}, el("strong", {}, "choose a file"), ` or drop it here (max ${fmtSize(maxSize)})`);
+  const ta = el("textarea", { placeholder: "Paste a password, API token, .env file or private note", spellcheck: "false", autofocus: "", "aria-label": "Secret" }) as HTMLTextAreaElement;
+  const fileInput = el("input", { type: "file", "aria-label": "File" }) as HTMLInputElement;
+  const dropText = el("div", {}, el("strong", {}, "Choose a file"), " or drop it here");
   const drop = el("div", { class: "drop", hidden: "" }, dropText, fileInput);
-  const tabText = el("button", { type: "button", role: "tab", "aria-selected": "true" }, "text");
-  const tabFile = el("button", { type: "button", role: "tab", "aria-selected": "false" }, "file");
-  const select = el("select", { "aria-label": "Expires after" }) as HTMLSelectElement;
-  for (const [label, secs] of EXPIRIES) select.append(el("option", { value: String(secs) }, label));
-  select.value = "86400";
-  const go = el("button", { class: "btn big", type: "button" }, "Encrypt and create link") as HTMLButtonElement;
-  const err = el("p", { class: "err" });
-  const card = el("div", { class: "card" },
-    el("div", { class: "tabs", role: "tablist" }, tabText, tabFile),
-    ta, drop,
-    el("div", { class: "row" }, el("label", { class: "inline" }, "expires after", select)),
-    el("div", { class: "row" }, go),
+  const tabText = el("button", { type: "button", role: "tab", "aria-selected": "true" }, "Text");
+  const tabFile = el("button", { type: "button", role: "tab", "aria-selected": "false" }, "File");
+  const select = el("select", {}) as HTMLSelectElement;
+  for (const [label, secs] of EXPIRIES) if (secs <= maxExpiry) select.append(el("option", { value: String(secs) }, label));
+  select.value = String(Math.min(86400, maxExpiry));
+  const go = button("btn", "Create link");
+  const err = el("p", { class: "err", role: "alert" });
+  const panel = el("section", { class: "panel", "aria-label": "New secret" },
+    el("div", { class: "panel-bar" }, el("div", { class: "tabs", role: "tablist" }, tabText, tabFile), el("span", {}, `Up to ${fmtSize(maxSize)}`)),
+    el("div", { class: "panel-body" }, ta, drop),
+    el("div", { class: "panel-foot" }, el("label", { class: "inline" }, "Expires after", select), go),
     err,
-    el("p", { class: "hint" }, "the link opens ", el("b", {}, "once"), ". then the ciphertext is deleted. expired secrets are purged."),
   );
 
   let mode: "text" | "file" = "text";
@@ -61,7 +93,7 @@ async function createView() {
   tabFile.onclick = () => setMode("file");
   fileInput.onchange = () => {
     const f = fileInput.files?.[0];
-    dropText.replaceChildren(f ? el("strong", {}, f.name) : el("strong", {}, "Choose a file"), f ? ` · ${fmtSize(f.size)}` : " or drop it here");
+    dropText.replaceChildren(...(f ? [el("strong", {}, f.name), `, ${fmtSize(f.size)}`] : [el("strong", {}, "Choose a file"), " or drop it here"]));
   };
   drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
   drop.ondragleave = () => drop.classList.remove("over");
@@ -70,18 +102,28 @@ async function createView() {
     if (e.dataTransfer?.files.length) { fileInput.files = e.dataTransfer.files; fileInput.onchange!(new Event("change")); }
   };
 
+  const h1 = el("h1", {}, "Share a secret once.");
+  const lede = el("p", { class: "lede" }, "It's encrypted on this device before it's uploaded. The key travels only inside the link, so the server holds something it can't read.");
+  const cli = el("div", { class: "cli" }, el("p", {}, "Or from a terminal:"), el("pre", {}, "$ cargo install hexcrypt-cli\n$ hexcrypt send .env"));
+  const sample = `${location.origin}/${hc.new_id()}#${hc.encode_key(hc.new_key())}`;
+  const explain = el("section", { class: "explain" },
+    el("h2", {}, "What's in a link"),
+    anatomy(sample),
+    el("p", {}, "The first person to open the link gets the secret. Reading it deletes the stored copy in the same step, so a second visit finds nothing. Unopened secrets are deleted when they expire."),
+  );
+
   go.onclick = async () => {
     err.textContent = "";
     let kind = 0, name = "", data: Uint8Array;
     if (mode === "text") {
-      if (!ta.value) { err.textContent = "Nothing to encrypt."; return; }
+      if (!ta.value) { err.textContent = "Type or paste something to share first."; ta.focus(); return; }
       data = new TextEncoder().encode(ta.value);
     } else {
       const f = fileInput.files?.[0];
-      if (!f) { err.textContent = "Pick a file first."; return; }
+      if (!f) { err.textContent = "Choose a file to share first."; return; }
       kind = 1; name = f.name; data = new Uint8Array(await f.arrayBuffer());
     }
-    if (data.length + 64 > maxSize) { err.textContent = `Too large. Limit is ${fmtSize(maxSize)}.`; return; }
+    if (data.length + 64 > maxSize) { err.textContent = `That's ${fmtSize(data.length)}. This server takes up to ${fmtSize(maxSize)}.`; return; }
     go.disabled = true; go.textContent = "Encrypting…";
     try {
       const id = hc.new_id();
@@ -89,106 +131,119 @@ async function createView() {
       const blob = hc.encrypt(id, key, kind, name, data);
       go.textContent = "Uploading…";
       const res = await fetch(`/api/v1/secrets/${id}`, { method: "PUT", headers: { "x-expires-seconds": select.value }, body: blob as BodyInit });
-      if (!res.ok) throw new Error(res.status === 413 ? "too large for this server." : `server said ${res.status}.`);
+      if (!res.ok) {
+        throw new Error(res.status === 413 ? `Too large for this server. The limit is ${fmtSize(maxSize)}.`
+          : res.status === 429 ? "You've hit this server's upload limit. Try again later."
+          : `The server returned an error (${res.status}). Try again.`);
+      }
       // The key goes in the fragment; browsers never send it to the server.
       const url = `${location.origin}/${id}#${hc.encode_key(key)}`;
-      resultView(url, select.selectedOptions[0].text);
+      h1.textContent = "Your link is ready.";
+      lede.textContent = "Send it over a channel you trust. Whoever opens it first gets the secret. Chat apps that preview links don't open it; only pressing Reveal does.";
+      cli.remove(); explain.remove();
+      showLink(panel, blob, url, select.selectedOptions[0].text);
     } catch (e) {
       err.textContent = String((e as Error).message ?? e);
-      go.disabled = false; go.textContent = "Encrypt and create link";
+      go.disabled = false; go.textContent = "Create link";
     }
   };
 
-  frame(
-    prompt("hexcrypt send"),
-    el("h1", {}, "Share a secret once."),
-    el("p", { class: "lede" }, "encrypted in your browser before upload. the key lives only in the link you send. we can't read it. neither can anyone without the link."),
-    card,
-    el("ul", { class: "how" },
-      el("li", {}, el("b", {}, "01"), el("span", {}, el("b", {}, "encrypt here"), " xchacha20-poly1305 in webassembly. plaintext never leaves this device.")),
-      el("li", {}, el("b", {}, "02"), el("span", {}, el("b", {}, "send the link"), " the key is after the # in the url. browsers never send that part to any server.")),
-      el("li", {}, el("b", {}, "03"), el("span", {}, el("b", {}, "read once"), " the first open deletes the ciphertext.")),
-    ),
-  );
+  frame([h1, lede, cli], panel, [explain]);
 }
 
-function resultView(url: string, expiry: string) {
-  const input = el("input", { type: "text", readonly: "", value: url, "aria-label": "Secret link" }) as HTMLInputElement;
-  const copy = el("button", { class: "btn", type: "button" }, "Copy") as HTMLButtonElement;
+function showLink(panel: HTMLElement, blob: Uint8Array, url: string, expiry: string) {
+  const dump = el("pre", { class: "dump", "aria-label": "Ciphertext as stored on the server" });
+  const copy = button("btn", "Copy link");
+  const again = button("btn quiet", "Share another secret");
+  const note = el("p", { class: "note", role: "status" }, `Opens once. Deleted in ${expiry} if nobody opens it.`);
   copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(url); copy.textContent = "Copied"; setTimeout(() => (copy.textContent = "Copy"), 1500); }
-    catch { input.select(); }
+    try { await navigator.clipboard.writeText(url); copy.textContent = "Copied"; setTimeout(() => (copy.textContent = "Copy link"), 1600); }
+    catch { note.textContent = "The clipboard isn't available here. Select the link above and copy it."; }
   };
-  const again = el("button", { class: "btn ghost", type: "button" }, "New secret") as HTMLButtonElement;
   again.onclick = () => createView();
-  frame(
-    prompt("hexcrypt send ... ok"),
-    el("h1", {}, "Your one-time link"),
-    el("p", { class: "lede" }, `opens once, then it's gone. expires in ${expiry.toLowerCase()} if never opened.`),
-    el("div", { class: "card" },
-      el("div", { class: "link" }, input, copy),
-      el("p", { class: "hint" }, "send it over a channel you trust. whoever opens it first gets the secret. chat link previews do not burn it; only pressing reveal does."),
-      el("div", { class: "row" }, again),
-    ),
+  panel.setAttribute("aria-label", "Your link");
+  panel.replaceChildren(
+    el("div", { class: "panel-bar" }, el("span", {}, "Encrypted. This is all the server stores."), el("span", {}, fmtSize(blob.length))),
+    el("div", { class: "panel-body sealed" }, dump),
+    el("div", { class: "panel-link" }, anatomy(url)),
+    el("div", { class: "panel-foot" }, again, copy),
+    note,
   );
-  input.focus(); input.select();
+  copy.focus();
+  stream(dump, hexRows(blob));
 }
 
 function revealView(id: string) {
   const keyStr = location.hash.slice(1);
-  const err = el("p", { class: "err" });
-  const reveal = el("button", { class: "btn big", type: "button" }, "Reveal secret") as HTMLButtonElement;
-  const body = el("div", {});
-  const card = el("div", { class: "card" }, body, reveal, err,
-    el("p", { class: "hint" }, "viewable ", el("b", {}, "once"), ". revealing deletes it from the server. be ready to copy or save it."));
+  const reveal = button("btn", "Reveal secret");
+  const err = el("p", { class: "err", role: "alert" });
+  const state = el("span", {}, "Sealed");
+  const msg = el("p", { class: "sealed-msg" }, "Revealing decrypts it on this device and deletes the server copy.");
+  const body = el("div", { class: "panel-body sealed" }, msg);
+  const foot = el("div", { class: "panel-foot" }, el("span", { class: "note" }, "Have somewhere ready to paste or save it."), reveal);
+  const panel = el("section", { class: "panel", "aria-label": "Secret" },
+    el("div", { class: "panel-bar" }, state, el("code", {}, id)), body, foot, err);
 
   if (!keyStr) {
-    reveal.hidden = true;
-    err.textContent = "link is missing its key (the part after #). ask the sender for the full link.";
+    foot.hidden = true;
+    msg.textContent = "This link is missing its key, the part after #. Ask the sender to copy the whole link.";
   }
 
   reveal.onclick = async () => {
-    reveal.disabled = true; reveal.textContent = "Fetching…"; err.textContent = "";
+    reveal.disabled = true; reveal.textContent = "Revealing…"; err.textContent = "";
     try {
       const key = hc.decode_key(keyStr);
       const res = await fetch(`/api/v1/secrets/${id}`, { cache: "no-store" });
-      if (res.status === 404) throw new Error("gone. already opened, expired, or never existed.");
-      if (!res.ok) throw new Error(`server said ${res.status}.`);
+      if (res.status === 404) {
+        state.textContent = "Gone";
+        msg.textContent = "Nothing to reveal. This secret was already opened, has expired, or the link is incomplete.";
+        foot.hidden = true;
+        return;
+      }
+      if (!res.ok) throw new Error(`The server returned an error (${res.status}). Try again.`);
       const blob = new Uint8Array(await res.arrayBuffer());
       const opened = hc.decrypt(id, key, blob);
-      reveal.hidden = true;
+      const dump = el("pre", { class: "dump" });
+      body.replaceChildren(dump);
+      await stream(dump, hexRows(blob));
+      if (!calm.matches) await sleep(300);
+
+      body.classList.remove("sealed");
+      state.textContent = "Revealed. The server copy is deleted.";
+      let action: HTMLElement;
       if (opened.kind === 0) {
         const text = new TextDecoder().decode(opened.data);
-        const copy = el("button", { class: "btn", type: "button" }, "Copy") as HTMLButtonElement;
-        copy.onclick = async () => { try { await navigator.clipboard.writeText(text); copy.textContent = "Copied"; } catch {} };
-        body.replaceChildren(el("pre", { class: "secret" }, text), el("div", { class: "row" }, copy));
+        body.replaceChildren(el("pre", { class: "secret" }, text));
+        const copy = button("btn", "Copy");
+        copy.onclick = async () => {
+          try { await navigator.clipboard.writeText(text); copy.textContent = "Copied"; }
+          catch { err.textContent = "The clipboard isn't available here. Select the text and copy it."; }
+        };
+        action = copy;
       } else {
-        const data = opened.data;
-        const dl = URL.createObjectURL(new Blob([data as BlobPart]));
-        const a = el("a", { class: "btn", href: dl, download: opened.name || "secret" }, "Download");
-        body.replaceChildren(el("div", { class: "file" },
-          el("div", {}, el("div", { class: "name" }, opened.name || "secret"), el("div", { class: "size" }, fmtSize(data.length))), a));
+        const name = opened.name || "secret";
+        body.replaceChildren(el("div", { class: "file" }, el("code", {}, name), el("span", {}, fmtSize(opened.data.length))));
+        action = el("a", { class: "btn", href: URL.createObjectURL(new Blob([opened.data as BlobPart])), download: name }, "Download");
       }
-      card.querySelector(".hint")!.textContent = "decrypted locally. the server copy is gone. save it now if you need it.";
+      foot.replaceChildren(el("span", { class: "note" }, "This is the only copy now. Save it before you leave."), action);
+      action.focus();
     } catch (e) {
       err.textContent = String((e as Error).message ?? e);
       reveal.disabled = false; reveal.textContent = "Reveal secret";
     }
   };
 
-  frame(
-    prompt(`hexcrypt get ${id}`),
+  frame([
     el("h1", {}, "Someone sent you a secret."),
-    el("p", { class: "lede" }, "it's encrypted. decryption happens in your browser with the key in this link."),
-    card,
-  );
+    el("p", { class: "lede" }, "It can be opened once. The key is in this link, so it's decrypted here in your browser, not on the server."),
+  ], panel);
 }
 
 (async () => {
   try {
     await init();
   } catch (e) {
-    app.replaceChildren(el("p", { class: "err" }, "Could not load the encryption module. " + String(e)));
+    app.replaceChildren(el("p", { class: "err" }, "The encryption module didn't load, so nothing can be encrypted here. Reload the page to try again. " + String(e)));
     return;
   }
   const m = location.pathname.match(ID_RE);

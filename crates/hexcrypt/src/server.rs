@@ -269,7 +269,9 @@ struct Dist;
 async fn static_file(uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
     let (file, cache) = match Dist::get(path) {
-        Some(f) if !path.is_empty() => (f, "public, max-age=31536000, immutable"),
+        // Only Vite's content-hashed assets can be cached forever; favicon.svg keeps its name.
+        Some(f) if path.starts_with("assets/") => (f, "public, max-age=31536000, immutable"),
+        Some(f) if !path.is_empty() => (f, "no-cache"),
         // Everything else (including /<id>) is the SPA shell.
         _ => match Dist::get("index.html") {
             Some(f) => (f, "no-store"),
