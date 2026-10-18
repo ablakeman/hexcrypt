@@ -69,4 +69,4 @@ cd web && npm run dev               # Vite dev server proxies /api to :8080
 
 ## License
 
-MIT or Apache-2.0, at your option.
+MIT.

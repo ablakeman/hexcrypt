@@ -105,7 +105,7 @@ pub fn new_key() -> Result<[u8; KEY_LEN], Error> {
 pub fn new_id() -> Result<String, Error> {
     let mut b = [0u8; ID_LEN / 2];
     random(&mut b)?;
-    Ok(hex::encode(b))
+    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
 }
 
 pub fn is_valid_id(id: &str) -> bool {

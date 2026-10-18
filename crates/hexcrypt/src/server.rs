@@ -8,7 +8,7 @@ use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use axum::{Json, Router};
+use axum::Router;
 use rusqlite::{params, Connection, OptionalExtension};
 use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::key_extractor::SmartIpKeyExtractor;
@@ -59,8 +59,8 @@ pub fn open_db(path: &str) -> anyhow::Result<Connection> {
     Ok(db)
 }
 
-pub fn router(db: Connection, opts: Opts) -> Router {
-    let state = App { db: Arc::new(Mutex::new(db)), opts: opts.clone() };
+pub fn router(db: Arc<Mutex<Connection>>, opts: Opts) -> Router {
+    let state = App { db, opts: opts.clone() };
 
     let governor = Arc::new(
         GovernorConfigBuilder::default()
@@ -103,8 +103,8 @@ pub fn router(db: Connection, opts: Opts) -> Router {
 }
 
 pub async fn run(opts: Opts) -> anyhow::Result<()> {
-    let db = open_db(&opts.db)?;
-    let sweeper = Arc::new(Mutex::new(open_db(&opts.db)?));
+    let db = Arc::new(Mutex::new(open_db(&opts.db)?));
+    let sweeper = db.clone();
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(60)).await;
@@ -125,11 +125,12 @@ pub async fn run(opts: Opts) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn config(State(app): State<App>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "max_size": app.opts.max_size,
-        "max_expiry": app.opts.max_expiry,
-    }))
+fn json(status: StatusCode, body: String) -> Response {
+    (status, [(header::CONTENT_TYPE, "application/json")], body).into_response()
+}
+
+async fn config(State(app): State<App>) -> Response {
+    json(StatusCode::OK, format!(r#"{{"max_size":{}}}"#, app.opts.max_size))
 }
 
 async fn store(
@@ -161,8 +162,8 @@ async fn store(
         params![id, body.as_ref(), expires_at],
     );
     match r {
-        Ok(_) => (StatusCode::CREATED, Json(serde_json::json!({ "id": id, "expires_at": expires_at })))
-            .into_response(),
+        // id is validated hex, so no JSON escaping is needed.
+        Ok(_) => json(StatusCode::CREATED, format!(r#"{{"id":"{id}","expires_at":{expires_at}}}"#)),
         Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == rusqlite::ErrorCode::ConstraintViolation => {
             (StatusCode::CONFLICT, "id taken").into_response()
         }
@@ -204,7 +205,7 @@ async fn fetch(State(app): State<App>, Path(id): Path<String>) -> Response {
 }
 
 #[derive(rust_embed::Embed)]
-#[folder = "$CARGO_MANIFEST_DIR/dist"]
+#[folder = "dist"]
 struct Dist;
 
 async fn static_file(uri: Uri) -> Response {
@@ -217,10 +218,8 @@ async fn static_file(uri: Uri) -> Response {
             None => return (StatusCode::NOT_FOUND, "web UI not built").into_response(),
         },
     };
-    let mime = mime_guess::from_path(if cache == "no-store" { "index.html" } else { path })
-        .first_or_octet_stream();
     (
-        [(header::CONTENT_TYPE, mime.as_ref().to_string()), (header::CACHE_CONTROL, cache.to_string())],
+        [(header::CONTENT_TYPE, file.metadata.mimetype().to_string()), (header::CACHE_CONTROL, cache.to_string())],
         file.data.into_owned(),
     )
         .into_response()
@@ -235,7 +234,7 @@ mod tests {
 
     fn app() -> Router {
         let opts = Opts { bind: "127.0.0.1:0".parse().unwrap(), db: ":memory:".into(), max_size: 1024, max_expiry: 86400 };
-        router(open_db(":memory:").unwrap(), opts)
+        router(Arc::new(Mutex::new(open_db(":memory:").unwrap())), opts)
     }
 
     async fn put(app: &Router, id: &str, ttl: &str, body: Vec<u8>) -> StatusCode {

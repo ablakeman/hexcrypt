@@ -12,27 +12,10 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 };
 const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
-// Theme: dark by default, remembered per browser.
-function initTheme(btn: HTMLButtonElement) {
-  const apply = (t: string) => {
-    document.documentElement.dataset.theme = t;
-    btn.textContent = t === "dark" ? "Light" : "Dark";
-  };
-  let theme = "dark";
-  try { theme = localStorage.getItem("theme") ?? "dark"; } catch {}
-  apply(theme);
-  btn.onclick = () => {
-    theme = theme === "dark" ? "light" : "dark";
-    try { localStorage.setItem("theme", theme); } catch {}
-    apply(theme);
-  };
-}
-
 function frame(...content: Node[]) {
-  const themeBtn = el("button", { class: "theme", type: "button" }) as HTMLButtonElement;
   const brand = el("a", { class: "brand", href: "/" }, el("img", { src: "/favicon.svg", alt: "" }), el("span", {}, "hexcrypt"));
   app.replaceChildren(
-    el("header", { class: "top" }, brand, themeBtn),
+    el("header", { class: "top" }, brand),
     ...content,
     el("footer", {},
       el("span", {}, "Zero-knowledge. Encrypted in your browser; the server only ever sees ciphertext."),
@@ -40,7 +23,6 @@ function frame(...content: Node[]) {
       el("span", {}, "CLI: ", el("code", {}, "cargo install hexcrypt-cli")),
     ),
   );
-  initTheme(themeBtn);
 }
 
 async function createView() {

@@ -15,19 +15,6 @@
   --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
-:root[data-theme="light"] {
-  color-scheme: light;
-  --bg: #f4f4f2;
-  --bg-2: #ffffff;
-  --bg-3: #eaeae7;
-  --line: #cfcfcb;
-  --text: #111416;
-  --muted: #5c6166;
-  --accent: #0b6fc0;
-  --accent-hover: #1093f5;
-  --accent-ink: #ffffff;
-  --danger: #cd0000;
-}
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
 body {
@@ -44,8 +31,6 @@ header.top { display: flex; align-items: center; justify-content: space-between;
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; font-weight: 700; letter-spacing: -0.01em; }
 .brand img { width: 28px; height: 28px; }
 .brand span { font-family: var(--mono); font-size: 18px; }
-.theme { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
-.theme:hover { color: var(--text); border-color: var(--muted); }
 
 h1 { font-size: clamp(28px, 5vw, 38px); line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 10px; }
 .lede { color: var(--muted); margin: 0 0 28px; font-size: 17px; }
@@ -96,4 +81,3 @@ pre.secret { background: var(--bg); border: 1px solid var(--line); border-radius
 footer { margin-top: 40px; color: var(--muted); font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; }
 footer a { color: var(--muted); }
 footer code { font-family: var(--mono); background: var(--bg-3); padding: 2px 6px; border-radius: 6px; }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

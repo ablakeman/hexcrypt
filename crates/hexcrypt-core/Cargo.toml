@@ -20,7 +20,6 @@ wasm = ["wasm-bindgen", "getrandom/wasm_js"]
 chacha20poly1305 = "0.11"
 getrandom = "0.4"
 base64 = "0.23"
-hex = "0.4"
 wasm-bindgen = { version = "0.2", optional = true }
 
 # wasm-pack's bundled wasm-opt rejects newer wasm features; 42 KB is small enough as-is.
