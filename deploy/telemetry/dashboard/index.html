@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; object-src 'none'; base-uri 'none'" />
+    <title>hexcrypt telemetry</title>
+    <link rel="icon" href="/dash/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/dash/app.css" />
+    <script type="module" src="/dash/app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <a class="brand" href="/"><img src="/dash/favicon.svg" width="22" height="22" alt="" />hexcrypt <span>telemetry</span></a>
+        <nav class="tabs" aria-label="Date range">
+          <a href="#7d">7 days</a>
+          <a href="#30d">30 days</a>
+          <a href="#90d">90 days</a>
+          <a href="#all">All time</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="lead" aria-live="polite">
+          <h1 id="headline">Reading the log…</h1>
+          <p id="subline"><noscript>This page needs JavaScript. The raw data is at <a href="/telemetry">/telemetry</a>.</noscript></p>
+          <dl class="flow" id="flow"></dl>
+        </section>
+
+        <section>
+          <h2>Who's visiting</h2>
+          <p class="note">Networks seen each day. A network counts as people once it loads the app or uses the CLI. Everything else is scanners, crawlers and link previews.</p>
+          <p class="legend"><i class="sw people"></i>People <i class="sw automated"></i>Automated</p>
+          <p class="readout" id="traffic-readout"></p>
+          <div class="chart" id="traffic"></div>
+        </section>
+
+        <section>
+          <h2>Secrets sent and read</h2>
+          <p class="note">Every secret can be read once. Ones never read expire on their own.</p>
+          <p class="legend"><i class="sw sent"></i>Sent <i class="sw read"></i>Read</p>
+          <p class="readout" id="secrets-readout"></p>
+          <div class="chart" id="secrets"></div>
+        </section>
+
+        <div class="pair">
+          <section>
+            <h2>When people use it</h2>
+            <p class="note">App loads and CLI calls by hour, in your time zone.</p>
+            <div class="heat" id="heat"></div>
+          </section>
+          <section>
+            <h2>Where visitors come from</h2>
+            <p class="note">Other sites that linked here.</p>
+            <ol class="bars" id="referrers"></ol>
+          </section>
+        </div>
+
+        <div class="pair">
+          <section>
+            <h2>What people use</h2>
+            <p class="note">Browser and platform, counted once per network per day.</p>
+            <ol class="bars" id="clients"></ol>
+          </section>
+          <section>
+            <h2>What scanners try</h2>
+            <p class="note">Paths hexcrypt doesn't have, most requested first.</p>
+            <ol class="bars probes" id="probes"></ol>
+          </section>
+        </div>
+
+        <section>
+          <h2>Where people got stuck</h2>
+          <div class="trouble" id="trouble"></div>
+        </section>
+      </main>
+
+      <footer>
+        <p id="updated"></p>
+        <a href="/telemetry">Raw data and SQL</a>
+      </footer>
+    </div>
+  </body>
+</html>

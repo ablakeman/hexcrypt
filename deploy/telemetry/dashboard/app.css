@@ -1,0 +1,140 @@
+/* hexcrypt.com's envelope palette. Solid ink is people, hatching is automated traffic,
+   and the seal red only ever means a secret was read and burned. Recursive carries both
+   voices: proportional for words, the MONO axis for every number a machine counted. */
+@font-face {
+  font-family: "Recursive";
+  src: url(recursive.woff2) format("woff2-variations");
+  font-weight: 300 1000;
+  font-display: swap;
+}
+:root {
+  color-scheme: light;
+  --paper: #eef2f7;
+  --sheet: #ffffff;
+  --ink: #14213d;
+  --muted: #55617a;
+  --rule: #d2d9e5;
+  --tint: #dfe5f0;
+  --seal: #b3262f;
+  --font: "Recursive", ui-sans-serif, system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #0f1626;
+    --sheet: #151e33;
+    --ink: #e7ebf3;
+    --muted: #9aa5bc;
+    --rule: #28334c;
+    --tint: #1d2840;
+    --seal: #f0707a;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 16px/1.55 var(--font);
+  font-variation-settings: "MONO" 0;
+  -webkit-font-smoothing: antialiased;
+}
+.num, .mono, svg text { font-variation-settings: "MONO" 1; font-variant-numeric: tabular-nums; }
+a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+body[aria-busy] main { opacity: 0.55; transition: opacity 0.2s 0.15s; }
+
+.shell { max-width: 1080px; margin: 0 auto; padding: 0 24px 40px; }
+
+header.top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px 24px; padding: 20px 0; }
+.brand { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; font: 700 18px/1 var(--font); font-variation-settings: "MONO" 1; letter-spacing: -0.02em; }
+.brand span { color: var(--muted); font-weight: 500; }
+.tabs { display: flex; gap: 20px; font-size: 15px; }
+.tabs a { color: var(--muted); text-decoration: none; padding: 4px 0; border-bottom: 2px solid transparent; }
+.tabs a:hover { color: var(--ink); }
+.tabs a[aria-current] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+
+/* The one loud thing: the range summarised as a sentence, numbers set in the machine voice. */
+.lead { padding: 56px 0 0; }
+h1 { font-size: clamp(32px, 4.8vw, 56px); font-weight: 820; line-height: 1.04; letter-spacing: -0.035em; margin: 0 0 18px; max-width: 20ch; text-wrap: balance; }
+h1 .num { letter-spacing: -0.06em; }
+#subline { font-size: 18px; color: var(--muted); margin: 0; max-width: 60ch; }
+#subline .num { color: var(--ink); }
+
+/* Lifecycle of a secret, left to right. */
+.flow { display: grid; grid-template-columns: repeat(4, 1fr); margin: 44px 0 0; border-top: 2px solid var(--ink); }
+.flow > div { padding: 14px 20px 22px; }
+.flow > div + div { border-left: 1px solid var(--rule); }
+.flow > div:first-child { padding-left: 0; }
+.flow dt { font-size: 14px; color: var(--muted); }
+.flow dd { margin: 4px 0 0; }
+.flow dd .num { display: block; font-size: 40px; font-weight: 700; line-height: 1.1; letter-spacing: -0.04em; }
+.flow .read .num { color: var(--seal); }
+.flow small { display: block; font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+section { padding: 36px 0 40px; border-top: 1px solid var(--rule); }
+.lead { border-top: 0; padding-bottom: 8px; }
+h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+.note { color: var(--muted); font-size: 14px; margin: 4px 0 16px; max-width: 64ch; }
+.legend { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+.legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
+.legend .sw + .sw, .legend .sw:not(:first-child) { margin-left: 12px; }
+.sw.people, .sw.sent { background: var(--ink); }
+.sw.automated { background: repeating-linear-gradient(45deg, var(--muted) 0 1.5px, var(--tint) 1.5px 3.5px); }
+.sw.read { background: var(--seal); }
+.readout { font-size: 14px; margin: 0 0 10px; min-height: 1.55em; }
+.readout b { font-weight: 600; }
+
+.chart { width: 100%; }
+svg.cols { display: block; overflow: visible; }
+svg.cols:focus-visible { outline-offset: 6px; }
+svg text { fill: var(--muted); font-size: 11px; }
+svg .grid { stroke: var(--rule); stroke-dasharray: 2 3; }
+svg .base { stroke: var(--muted); }
+svg .people, svg .sent { fill: var(--ink); }
+svg .read { fill: var(--seal); }
+svg .trouble { fill: var(--muted); }
+svg .hatch-bg { fill: var(--tint); }
+svg .hatch-line { stroke: var(--muted); stroke-width: 1.5; }
+svg g.on rect { opacity: 0.72; }
+
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 56px; }
+
+/* Week by hour. Empty hours stay as faint paper; busier hours fill in with ink. */
+.heat { display: grid; grid-template-columns: 2.6em repeat(24, minmax(0, 1fr)); gap: 2px; font-size: 11px; color: var(--muted); }
+.heat i { aspect-ratio: 1; border-radius: 2px; background: color-mix(in srgb, var(--ink) calc(var(--a, 0) * 100%), var(--tint)); }
+.heat .day { align-self: center; }
+.heat .hour { font-variation-settings: "MONO" 1; padding-top: 3px; }
+
+.bars { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.bars li { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 7px 0 0; }
+.bars .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bars .mono { font-size: 13px; }
+.bars i { grid-column: 1 / -1; height: 4px; margin-top: 5px; background: var(--ink); border-radius: 1px; }
+.probes i { background: repeating-linear-gradient(45deg, var(--muted) 0 1.5px, var(--tint) 1.5px 3.5px); }
+.bars li.empty { display: block; color: var(--muted); padding: 0; max-width: 40ch; }
+
+.trouble { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 16px; }
+.trouble p { margin: 0 0 10px; font-size: 14px; color: var(--muted); max-width: 30ch; }
+.trouble p .num { display: block; font-size: 28px; font-weight: 700; color: var(--ink); line-height: 1.2; }
+
+footer { display: flex; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; padding: 20px 0 0; border-top: 1px solid var(--rule); font-size: 14px; color: var(--muted); }
+footer p { margin: 0; }
+footer a { color: var(--ink); }
+
+@media (max-width: 760px) {
+  .shell { padding: 0 16px 32px; }
+  .lead { padding-top: 32px; }
+  .flow { grid-template-columns: 1fr 1fr; }
+  .flow > div { padding: 14px 12px 18px 0; }
+  .flow > div:nth-child(odd) { border-left: 0; }
+  .flow > div:nth-child(even) { padding-left: 16px; }
+  .flow > div:nth-child(n+3) { border-top: 1px solid var(--rule); }
+  .pair, .trouble { grid-template-columns: 1fr; }
+  .heat { grid-template-columns: 2.4em repeat(24, minmax(0, 1fr)); gap: 1px; }
+  .trouble { gap: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[aria-busy] main { transition: none; }
+}
